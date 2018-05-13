@@ -1,0 +1,5 @@
+D:\老郭\一些研究\SOALogSolution\SOALog\obj\Debug\SOALog.csprojResolveAssemblyReference.cache
+D:\老郭\一些研究\SOALogSolution\SOALog\bin\Debug\SOALog.dll
+D:\老郭\一些研究\SOALogSolution\SOALog\bin\Debug\SOALog.pdb
+D:\老郭\一些研究\SOALogSolution\SOALog\obj\Debug\SOALog.dll
+D:\老郭\一些研究\SOALogSolution\SOALog\obj\Debug\SOALog.pdb
