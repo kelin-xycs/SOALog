@@ -22,6 +22,8 @@ namespace SOALog
     //***  所以，SOALog 的 作用 就是可以在 调用服务失败的时候，记录 Log 到 数据库 里。 
     //***  Log 记录到 数据库 的 优点 是 便于 查询 分析，还可以用 报表 呈现出来。
     //***  报表 也可以呈现给 用户和相关各方 看，作为问题处理追踪 的 一个 报表。
+    //
+    //***  总的来说，这是一种 松耦合 乐观 的 数据一致性 解决方案。
     public class Log
     {
         private static Queue<string[]> _queue = new Queue<string[]>();
@@ -131,11 +133,11 @@ namespace SOALog
                     }
                 }
 
-                Console.WriteLine(cmd.CommandText);
-                foreach(SqlParameter para in cmd.Parameters)
-                {
-                    Console.WriteLine(para.ParameterName + " " + para.Value);
-                }
+                //Console.WriteLine(cmd.CommandText);
+                //foreach(SqlParameter para in cmd.Parameters)
+                //{
+                //    Console.WriteLine(para.ParameterName + " " + para.Value);
+                //}
                 using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
                     cmd.Connection = conn;
