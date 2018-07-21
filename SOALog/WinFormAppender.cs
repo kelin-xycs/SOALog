@@ -18,11 +18,11 @@ namespace SOALog
 
         private ConcurrentQueue<string> queue = new ConcurrentQueue<string>();
 
-
         public ConcurrentQueue<string> Queue
         {
             get { return queue; }
         }
+
 
         private WinForm form;
         
@@ -35,10 +35,7 @@ namespace SOALog
 
             Thread thread = new Thread(Work);
             thread.Start();
-
-            
         }
-
 
         private void Work()
         {

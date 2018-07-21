@@ -15,20 +15,24 @@ namespace SOALog
     {
 
 
+        private static Stream _stream;
+
+
         private int batchSize = 500;
         private int flushInterval = 200;
 
-        private ConcurrentQueue<string> queue = new ConcurrentQueue<string>();
 
-        private static Stream _stream;
+        private ConcurrentQueue<string> queue = new ConcurrentQueue<string>();
 
         public ConcurrentQueue<string> Queue
         {
             get { return queue; }
         }
 
+
         static FileAppender()
         {
+
             string file = ConfigurationManager.AppSettings["SOALog.File.File"];
 
             if (string.IsNullOrEmpty(file))
