@@ -5,157 +5,172 @@ using System.Text;
 using System.Threading.Tasks;
 
 using System.Configuration;
+using System.Collections.Concurrent;
 using System.Threading;
-using System.Data.SqlClient;
 
 namespace SOALog
 {
-    //***  因为我本机没有 Sql Server 环境，所以这个程序实际上并没有在 Sql Server 上运行测试过
-    //***  只测试过 生成的 Sql 和 参数
-    //
-    //***  下面说一下编写 SOALog 的 缘由 和 理念
-    //
-    //***  其实我不太赞同 微服务。但 SOA 倒是可能成为 趋势。因为 平台 与 平台 之间的 交互 应该会是一个 趋势
-    //***  微服务 的 第一个 课题 就是 实现 数据一致性。SOA 也需要 解决 这个问题。
-    //***  但实际上，数据不一致 并不可怕，关键在于 清晰的 记录Log，及 提示出来，
-    //***  让 用户 和 各方 能够清楚的看到 这一笔交易 是 失败 的，问题出在了哪里，接下来要怎么处理。
-    //***  所以，SOALog 的 作用 就是可以在 调用服务失败的时候，记录 Log 到 数据库 里。 
-    //***  Log 记录到 数据库 的 优点 是 便于 查询 分析，还可以用 报表 呈现出来。
-    //***  报表 也可以呈现给 用户和相关各方 看，作为问题处理追踪 的 一个 报表。
-    //
-    //***  总的来说，这是一种 松耦合 乐观 的 数据一致性 解决方案。
     public class Log
     {
-        private static Queue<string[]> _queue = new Queue<string[]>();
 
-        private static string _tableName;
-        private static IList<string> _columnList;
-        private static string _connectionString;
-        
-        //  可根据实际需要 修改 这些参数
-        private static int _interval = 2000;  // 每次向数据库写入 Log 的 时间间隔
-        private static int _batchInsertToDBCount = 10;  // 每次向数据库写入多少笔记录
-        private static int _queueCount = 100;  // 队列中最多缓存多少笔记录
+
+        private static ConcurrentQueue<string[]> _dbQueue = new ConcurrentQueue<string[]>();
+        private static ConcurrentQueue<string> _commonQueue = new ConcurrentQueue<string>();
+
+
+        private const int _dispatchInterval = 200;
+        private const int _batchSize = 500;
+
+
+        private static DBAppender dbAppender;
+        private static List<ICommonAppender> _commonAppenderList = new List<ICommonAppender>();
+
 
         static Log()
         {
-            _tableName = ConfigurationManager.AppSettings["SOALog.Table"];
-            _connectionString = ConfigurationManager.AppSettings["SOALog.ConnectionString"];
 
-            string columnStr = ConfigurationManager.AppSettings["SOALog.Columns"];
+            string str = ConfigurationManager.AppSettings["SOALog.Appenders"];
 
-            string[] tokens = columnStr.Split(new char[] { ';' });
-
-            _columnList = new List<string>();
-
-            foreach(string token in tokens)
+            if (str == null)
             {
-                _columnList.Add(token.Trim());
+                throw new LogException("缺少 SOALog.Appenders 配置 。");
+            }
+            
+
+            string[] tokens = str.Split(',');
+
+
+            string t;
+
+            ICommonAppender appender;
+
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                t = tokens[i].Trim();
+
+                if (t == "DB")
+                {
+                    dbAppender = new DBAppender();
+                    continue;
+                }
+
+                appender = GetAppender(t);
+
+                _commonAppenderList.Add(appender);
+                
             }
 
-            Thread thread = new Thread(new ThreadStart(LogWorker));
+
+            for (int i = 0; i < _commonAppenderList.Count; i++)
+            {
+                appender = _commonAppenderList[i];
+
+                appender.Start();
+            }
+
+
+            if (dbAppender != null)
+            {
+                dbAppender.Start();
+            }
+            
+
+            Thread thread = new Thread(Dispatch);
             thread.Start();
         }
 
-        private static void LogWorker()
+        private static ICommonAppender GetAppender(string name)
         {
-            
-            while (true)
+            switch(name)
             {
-                Thread.Sleep(_interval);
+                case "Console" :
+                    return new ConsoleAppender();
 
-                IList<string[]> list = new List<string[]>();
+                case "WinForm" :
+                    return new WinFormAppender();
 
-                for (int i = 0; i < _batchInsertToDBCount; i++)
-                {
-                    if (_queue.Count == 0)
-                        break;
+                case "File":
+                    return new FileAppender();
 
-                    list.Add(_queue.Dequeue());
-                }
-
-                try
-                {
-                    SaveToDB(list);
-                }
-                catch
-                {
-
-                }
-                
+                default:
+                    throw new LogException("不存在的 Appender ： \"" + name + "\" 。 注意大小写区分 。");
             }
-            
         }
 
-        private static void SaveToDB(IList<string[]> list)
+        private static void Dispatch()
         {
-            
 
-            StringBuilder sb = new StringBuilder();
-
-
-            for(int i=0; i<list.Count; i++)
+            while(true)
             {
-                sb.Append("insert into " + _tableName + " (");
-                
-                foreach(string columnName in _columnList)
-                {
-                    sb.Append(columnName + ", ");
-                }
-                sb.Remove(sb.Length - 2, 2);
-                sb.Append(") values (");
 
-                foreach (string columnName in _columnList)
+                if (_dbQueue.Count == 0)
                 {
-                    sb.Append("@" + columnName + i.ToString() + ", ");
+                    Thread.Sleep(_dispatchInterval);
                 }
-                sb.Remove(sb.Length - 2, 2);
 
-                sb.Append(");");
+                DispatchCommonAppender();
+
+                DispatchDBAppender();
+
             }
 
+        }
 
-            using (SqlCommand cmd = new SqlCommand(sb.ToString()))
+        private static void DispatchCommonAppender()
+        {
+            string msg;
+
+            ICommonAppender appender;
+
+            for (int i = 0; i < _batchSize; i++)
             {
-                string key;
-                string value;
-                string[] values;
-                
-                for (int i = 0; i < list.Count; i++)
+                if (!_commonQueue.TryDequeue(out msg))
+                    break;
+
+                for (int j = 0; j < _commonAppenderList.Count; j++)
                 {
-                    for(int j=0; j<_columnList.Count; j++)
+                    appender = _commonAppenderList[j];
+
+                    if (!appender.IsValid)
                     {
-                        key = _columnList[j];
-                        values = list[i];
-                        value = values[j];
+                        _commonAppenderList.Remove(appender);
 
-                        cmd.Parameters.AddWithValue("@" + key + i.ToString(), value);
+                        continue;
                     }
-                }
 
-                //Console.WriteLine(cmd.CommandText);
-                //foreach(SqlParameter para in cmd.Parameters)
-                //{
-                //    Console.WriteLine(para.ParameterName + " " + para.Value);
-                //}
-                using (SqlConnection conn = new SqlConnection(_connectionString))
-                {
-                    cmd.Connection = conn;
-                    cmd.ExecuteNonQuery();
+                    appender.Queue.Enqueue(msg);
                 }
             }
-
-            
         }
-        
-        public static void Error(string[] values)
+
+        private static void DispatchDBAppender()
         {
-            if (_queue.Count >= _queueCount)
-                return;
+            string[] values;
 
-            _queue.Enqueue(values);
+            for (int i = 0; i < _batchSize; i++)
+            {
 
+                if (!_dbQueue.TryDequeue(out values))
+                    break;
+
+                if (!dbAppender.IsValid)
+                    break;
+
+                dbAppender.Queue.Enqueue(values);
+
+            }
+        }
+
+        public static void Info(string msg)
+        {
+            _commonQueue.Enqueue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") 
+                + " [" + Thread.CurrentThread.ManagedThreadId + "] "
+                + msg);
+        }
+
+        public static void Info(string[] values)
+        {
+            _dbQueue.Enqueue(values);
         }
     }
-
 }

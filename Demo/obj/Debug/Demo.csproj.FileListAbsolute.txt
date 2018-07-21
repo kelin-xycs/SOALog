@@ -1,0 +1,8 @@
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\bin\Demo.dll.config
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\bin\Demo.dll
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\bin\Demo.pdb
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\obj\Debug\Demo.csprojResolveAssemblyReference.cache
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\obj\Debug\Demo.dll
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\obj\Debug\Demo.pdb
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\bin\SOALog.dll
+C:\新建文件夹\老郭\一些研究\SOALogSolution\Demo\bin\SOALog.pdb
