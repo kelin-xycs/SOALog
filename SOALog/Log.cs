@@ -22,7 +22,7 @@ namespace SOALog
         private const int _batchSize = 500;
 
 
-        private static DBAppender dbAppender;
+        private static DBAppender _dbAppender;
         private static List<ICommonAppender> _commonAppenderList = new List<ICommonAppender>();
 
 
@@ -50,7 +50,7 @@ namespace SOALog
 
                 if (t == "DB")
                 {
-                    dbAppender = new DBAppender();
+                    _dbAppender = new DBAppender();
                     continue;
                 }
 
@@ -69,14 +69,17 @@ namespace SOALog
             }
 
 
-            if (dbAppender != null)
+            if (_dbAppender != null)
             {
-                dbAppender.Start();
+                _dbAppender.Start();
             }
             
 
-            Thread thread = new Thread(Dispatch);
-            thread.Start();
+            Thread threadCommon = new Thread(DispatchCommon);
+            threadCommon.Start();
+
+            Thread threadDB = new Thread(DispatchDB);
+            threadDB.Start();
         }
 
         private static ICommonAppender GetAppender(string name)
@@ -97,7 +100,24 @@ namespace SOALog
             }
         }
 
-        private static void Dispatch()
+        private static void DispatchCommon()
+        {
+
+            while (true)
+            {
+
+                if (_commonQueue.Count == 0)
+                {
+                    Thread.Sleep(_dispatchInterval);
+                }
+
+                DispatchCommonAppender();
+
+            }
+
+        }
+
+        private static void DispatchDB()
         {
 
             while(true)
@@ -107,8 +127,6 @@ namespace SOALog
                 {
                     Thread.Sleep(_dispatchInterval);
                 }
-
-                DispatchCommonAppender();
 
                 DispatchDBAppender();
 
@@ -153,16 +171,19 @@ namespace SOALog
                 if (!_dbQueue.TryDequeue(out values))
                     break;
 
-                if (!dbAppender.IsValid)
-                    break;
+                if (!_dbAppender.IsValid)
+                    continue;
 
-                dbAppender.Queue.Enqueue(values);
+                _dbAppender.Queue.Enqueue(values);
 
             }
         }
 
         public static void Info(string msg)
         {
+            if (_commonAppenderList.Count == 0)
+                return;
+
             _commonQueue.Enqueue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") 
                 + " [" + Thread.CurrentThread.ManagedThreadId + "] "
                 + msg);
@@ -170,6 +191,9 @@ namespace SOALog
 
         public static void Info(string[] values)
         {
+            if (!_dbAppender.IsValid)
+                return;
+
             _dbQueue.Enqueue(values);
         }
     }
